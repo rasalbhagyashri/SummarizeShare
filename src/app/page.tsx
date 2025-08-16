@@ -6,7 +6,7 @@ import React, { useState, useTransition } from 'react';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
 
-import { generateSummaryAction } from '@/app/actions';
+import { generateSummaryAction, sendEmailAction } from '@/app/actions';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -25,6 +25,7 @@ export default function SummarizeSharePage() {
   const [recipientEmail, setRecipientEmail] = useState('');
   const [apiError, setApiError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
   const { toast } = useToast();
 
   const form = useForm<z.infer<typeof formSchema>>({
@@ -69,7 +70,39 @@ export default function SummarizeSharePage() {
     });
   };
 
-  const mailtoHref = summary ? `mailto:${recipientEmail}?subject=Meeting Summary&body=${encodeURIComponent(summary)}` : '#';
+  const handleSendEmail = async () => {
+    if (!summary || !recipientEmail) return;
+
+    setIsSendingEmail(true);
+    try {
+      const result = await sendEmailAction({
+        to_email: recipientEmail,
+        summary: summary,
+      });
+
+      if (result.error) {
+        toast({
+          variant: "destructive",
+          title: "Error sending email",
+          description: result.error,
+        });
+      } else {
+        toast({
+          title: "Email Sent!",
+          description: "The summary has been sent successfully.",
+        });
+      }
+    } catch (e) {
+      toast({
+        variant: "destructive",
+        title: "Error sending email",
+        description: "An unexpected error occurred.",
+      });
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
+
 
   return (
     <main className="flex min-h-screen w-full flex-col items-center justify-center bg-background p-4 sm:p-6 md:p-8">
@@ -177,12 +210,19 @@ export default function SummarizeSharePage() {
                       onChange={(e) => setRecipientEmail(e.target.value)}
                       className="flex-grow"
                     />
-                    <a href={mailtoHref} tabIndex={-1}>
-                      <Button className="w-full sm:w-auto bg-accent hover:bg-accent/90" disabled={!summary || !recipientEmail}>
-                        <Mail className="mr-2 h-5 w-5" />
-                        Share
-                      </Button>
-                    </a>
+                    <Button onClick={handleSendEmail} className="w-full sm:w-auto bg-accent hover:bg-accent/90" disabled={!summary || !recipientEmail || isSendingEmail}>
+                       {isSendingEmail ? (
+                          <>
+                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                            Sending...
+                          </>
+                        ) : (
+                          <>
+                            <Mail className="mr-2 h-5 w-5" />
+                            Share
+                          </>
+                        )}
+                    </Button>
                   </div>
                 </div>
               </div>
