@@ -2,11 +2,12 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Loader2, Sparkles, Mail, Clipboard } from 'lucide-react';
-import React, { useState, useTransition } from 'react';
+import React, { useState, useTransition, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import * as z from 'zod';
+import emailjs from '@emailjs/browser';
 
-import { generateSummaryAction, sendEmailAction } from '@/app/actions';
+import { generateSummaryAction } from '@/app/actions';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
@@ -35,6 +36,9 @@ export default function SummarizeSharePage() {
       customPrompt: 'Summarize in bullet points for executives.',
     },
   });
+  
+  const emailFormRef = useRef<HTMLFormElement>(null);
+
 
   function onSubmit(values: z.infer<typeof formSchema>) {
     setApiError(null);
@@ -70,37 +74,42 @@ export default function SummarizeSharePage() {
     });
   };
 
-  const handleSendEmail = async () => {
-    if (!summary || !recipientEmail) return;
+  const handleSendEmail = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!summary || !recipientEmail || !emailFormRef.current) return;
 
     setIsSendingEmail(true);
-    try {
-      const result = await sendEmailAction({
-        to_email: recipientEmail,
-        summary: summary,
-      });
 
-      if (result.error) {
+    const serviceId = process.env.NEXT_PUBLIC_EMAILJS_SERVICE_ID;
+    const templateId = process.env.NEXT_PUBLIC_EMAILJS_TEMPLATE_ID;
+    const publicKey = process.env.NEXT_PUBLIC_EMAILJS_PUBLIC_KEY;
+
+    if (!serviceId || !templateId || !publicKey) {
         toast({
-          variant: "destructive",
-          title: "Error sending email",
-          description: result.error,
+            variant: 'destructive',
+            title: 'EmailJS Configuration Error',
+            description: 'One or more EmailJS environment variables are missing.',
         });
-      } else {
-        toast({
-          title: "Email Sent!",
-          description: "The summary has been sent successfully.",
-        });
-      }
-    } catch (e) {
-      toast({
-        variant: "destructive",
-        title: "Error sending email",
-        description: "An unexpected error occurred.",
-      });
-    } finally {
-      setIsSendingEmail(false);
+        setIsSendingEmail(false);
+        return;
     }
+
+    emailjs.sendForm(serviceId, templateId, emailFormRef.current, publicKey)
+      .then((result) => {
+          toast({
+            title: "Email Sent!",
+            description: "The summary has been sent successfully.",
+          });
+      }, (error) => {
+          toast({
+            variant: "destructive",
+            title: "Error sending email",
+            description: error.text || "An unexpected error occurred.",
+          });
+      })
+      .finally(() => {
+        setIsSendingEmail(false);
+      });
   };
 
 
@@ -199,32 +208,39 @@ export default function SummarizeSharePage() {
                   </Button>
                 </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="email" className="text-lg font-semibold">Share via Email</Label>
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <Input
-                      id="email"
-                      type="email"
-                      placeholder="Recipient's email address"
-                      value={recipientEmail}
-                      onChange={(e) => setRecipientEmail(e.target.value)}
-                      className="flex-grow"
-                    />
-                    <Button onClick={handleSendEmail} className="w-full sm:w-auto bg-accent hover:bg-accent/90" disabled={!summary || !recipientEmail || isSendingEmail}>
-                       {isSendingEmail ? (
-                          <>
-                            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                            Sending...
-                          </>
-                        ) : (
-                          <>
-                            <Mail className="mr-2 h-5 w-5" />
-                            Share
-                          </>
-                        )}
-                    </Button>
-                  </div>
-                </div>
+                <form ref={emailFormRef} onSubmit={handleSendEmail} className="space-y-2">
+                    <Label htmlFor="email" className="text-lg font-semibold">Share via Email</Label>
+                    {/* Hidden fields for the email content */}
+                    <input type="hidden" name="to_email" value={recipientEmail} />
+                    <input type="hidden" name="summary" value={summary} />
+                    <input type="hidden" name="from_name" value="SummarizeShare" />
+                    <input type="hidden" name="subject" value="Your Meeting Summary" />
+
+                    <div className="flex flex-col sm:flex-row gap-2">
+                        <Input
+                            id="email"
+                            type="email"
+                            placeholder="Recipient's email address"
+                            value={recipientEmail}
+                            onChange={(e) => setRecipientEmail(e.target.value)}
+                            className="flex-grow"
+                            name="to_email_visible" /* This is just for display, the real value is hidden */
+                        />
+                        <Button type="submit" className="w-full sm:w-auto bg-accent hover:bg-accent/90" disabled={!summary || !recipientEmail || isSendingEmail}>
+                        {isSendingEmail ? (
+                            <>
+                                <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                                Sending...
+                            </>
+                            ) : (
+                            <>
+                                <Mail className="mr-2 h-5 w-5" />
+                                Share
+                            </>
+                            )}
+                        </Button>
+                    </div>
+                </form>
               </div>
             )}
           </CardFooter>
