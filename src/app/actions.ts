@@ -2,7 +2,6 @@
 
 import { generateSummary } from '@/ai/flows/generate-summary';
 import { z } from 'zod';
-import emailjs from '@emailjs/browser';
 
 const ActionInputSchema = z.object({
   transcript: z.string().min(50, 'Transcript must be at least 50 characters.'),
